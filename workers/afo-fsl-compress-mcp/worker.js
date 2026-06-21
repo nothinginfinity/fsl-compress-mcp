@@ -1,4 +1,4 @@
-const VERSION="0.4.1";
+const VERSION="0.4.2";
 const V4README_FORMAT_VERSION="0.3.0";
 const WORKER_NAME="afo-fsl-compress-mcp";
 const CORS={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,Mcp-Session-Id'};
@@ -142,7 +142,7 @@ function utf8ToBase64(str){ return btoa(unescape(encodeURIComponent(str))); }
 
 const TOOLS=[
 { "name":"afo-fsl-compress_status", "description":"Health check. Returns version, all binding statuses, and tool list.", "inputSchema":{"type":"object","properties":{},"required":[]} },
-{ "name":"compress_repo", "description":"Cursor-aware: fetches GitHub repo tree, classifies each file (P/C/L/G/D), extracts keyword frequency+first-line per file, runs language-aware file-level signal detection (Python/JS Runtime, Cloudflare Worker Env), stores raw content in R2 keyed deterministically by repo+branch+path (idempotent re-runs), rebuilds the full dash-codex after every batch, and indexes everything in D1. Excludes its own .v4readme output from the scan.",
+{ "name":"compress_repo", "description":"Cursor-aware: fetches GitHub repo tree, classifies each file (P/C/L/G/D), extracts keyword frequency+first-line per file, runs language-aware file-level signal detection (Python/JS Runtime, Cloudflare Worker Env), stores raw content in R2 keyed deterministically by repo+branch+path (idempotent re-runs), rebuilds the full dash-codex after every batch, prunes stale chunks for files no longer present once the scan completes, and indexes everything in D1. Excludes its own .v4readme output from the scan.",
   "inputSchema":{"type":"object","required":["owner","repo"],"properties":{
     "owner":{"type":"string"},"repo":{"type":"string"},"branch":{"type":"string","default":"main"},
     "path":{"type":"string"},"max_files":{"type":"number","default":20},"offset":{"type":"number","default":0}
@@ -298,9 +298,19 @@ async function handle(name,args,env,ctx){
     }
 
     const allRows=await dbAll(env.DB,'SELECT file_path,orig_bytes,top_keywords FROM fsl_chunks WHERE repo_key=? AND branch=?',[repoKey,branch]);
+    const currentPaths=new Set(files.map(f=>f.path));
+    let liveRows=allRows;
+    if(done){
+      for(const r of allRows){
+        if(!currentPaths.has(r.file_path)){
+          await dbRun(env.DB,'DELETE FROM fsl_chunks WHERE repo_key=? AND branch=? AND file_path=?',[repoKey,branch,r.file_path]);
+        }
+      }
+      liveRows=allRows.filter(r=>currentPaths.has(r.file_path));
+    }
     let totalOrig=0, totalCompressed=0;
     const pathCounts={};
-    for(const r of allRows){
+    for(const r of liveRows){
       totalOrig+=r.orig_bytes;
       totalCompressed+=(r.top_keywords||'').length+r.file_path.length+20;
       for(const seg of r.file_path.split('/')){ if(seg.length>3) pathCounts[seg]=(pathCounts[seg]||0)+1; }
@@ -316,9 +326,9 @@ async function handle(name,args,env,ctx){
 
     const ratio=totalOrig>0?(totalOrig/Math.max(totalCompressed,1)):0;
     await dbRun(env.DB,'UPDATE fsl_jobs SET files_compressed=?,orig_bytes=?,compressed_bytes=?,ratio=?,status=?,updated_at=? WHERE job_id=?',
-      [allRows.length,totalOrig,totalCompressed,ratio,done?'complete':'partial',nowIso(),jobId]);
+      [liveRows.length,totalOrig,totalCompressed,ratio,done?'complete':'partial',nowIso(),jobId]);
 
-    return {ok:true,job_id:jobId,repo:repoKey,branch,sha:commit.slice(0,12),files_found:files.length,files_compressed_this_batch:compressedCount,total_chunks_indexed:allRows.length,next_offset:next,done,orig_bytes:totalOrig,compressed_bytes:totalCompressed,ratio:Number(ratio.toFixed(2))};
+    return {ok:true,job_id:jobId,repo:repoKey,branch,sha:commit.slice(0,12),files_found:files.length,files_compressed_this_batch:compressedCount,total_chunks_indexed:liveRows.length,next_offset:next,done,orig_bytes:totalOrig,compressed_bytes:totalCompressed,ratio:Number(ratio.toFixed(2))};
   }
 
   if(name==="query_compressed"){
