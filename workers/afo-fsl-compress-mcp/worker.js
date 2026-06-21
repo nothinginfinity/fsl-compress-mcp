@@ -14,140 +14,140 @@ const TOOLS=[{
   "name": "compress_repo",
   "description": "Cursor-aware: fetches GitHub repo tree, classifies each file (P/C/L/G/D), extracts keyword frequency per file, builds a dash-codex from repeated path segments, stores raw content in R2, and indexes chunks+codex+job stats in D1.",
   "inputSchema": {
-    "properties": {
-      "branch": {
-        "default": "main",
-        "type": "string"
-      },
-      "max_files": {
-        "default": 20,
-        "type": "number"
-      },
-      "offset": {
-        "default": 0,
-        "type": "number"
-      },
-      "owner": {
-        "type": "string"
-      },
-      "path": {
-        "type": "string"
-      },
-      "repo": {
-        "type": "string"
-      }
-    },
+    "type": "object",
     "required": [
       "owner",
       "repo"
     ],
-    "type": "object"
+    "properties": {
+      "owner": {
+        "type": "string"
+      },
+      "repo": {
+        "type": "string"
+      },
+      "branch": {
+        "type": "string",
+        "default": "main"
+      },
+      "path": {
+        "type": "string"
+      },
+      "max_files": {
+        "type": "number",
+        "default": 20
+      },
+      "offset": {
+        "type": "number",
+        "default": 0
+      }
+    }
   }
 },
 {
   "name": "query_compressed",
   "description": "Keyword/term search against the D1 chunk index for a compressed repo. Returns chunk locations and metadata, not full content (near-zero token cost).",
   "inputSchema": {
+    "type": "object",
+    "required": [
+      "owner",
+      "repo",
+      "term"
+    ],
     "properties": {
-      "branch": {
-        "default": "main",
-        "type": "string"
-      },
-      "limit": {
-        "default": 20,
-        "type": "number"
-      },
       "owner": {
         "type": "string"
       },
       "repo": {
         "type": "string"
       },
+      "branch": {
+        "type": "string",
+        "default": "main"
+      },
       "term": {
         "type": "string"
+      },
+      "limit": {
+        "type": "number",
+        "default": 20
       }
-    },
-    "required": [
-      "owner",
-      "repo",
-      "term"
-    ],
-    "type": "object"
+    }
   }
 },
 {
   "name": "decompress_chunk",
   "description": "Selective decompression: fetches the full raw content of a specific chunk (by chunk_id or file_path) from R2. This is the only operation that costs full tokens for that content.",
   "inputSchema": {
+    "type": "object",
+    "required": [
+      "owner",
+      "repo"
+    ],
     "properties": {
-      "branch": {
-        "default": "main",
+      "owner": {
         "type": "string"
+      },
+      "repo": {
+        "type": "string"
+      },
+      "branch": {
+        "type": "string",
+        "default": "main"
       },
       "chunk_id": {
         "type": "string"
       },
       "file_path": {
         "type": "string"
-      },
-      "owner": {
-        "type": "string"
-      },
-      "repo": {
-        "type": "string"
       }
-    },
-    "required": [
-      "owner",
-      "repo"
-    ],
-    "type": "object"
+    }
   }
 },
 {
   "name": "get_codex",
   "description": "Returns the dash-codex (repeated path segment dictionary) and global keyword frequency table for a compressed repo - the structural map without any file content.",
   "inputSchema": {
+    "type": "object",
+    "required": [
+      "owner",
+      "repo"
+    ],
     "properties": {
-      "branch": {
-        "default": "main",
-        "type": "string"
-      },
       "owner": {
         "type": "string"
       },
       "repo": {
         "type": "string"
+      },
+      "branch": {
+        "type": "string",
+        "default": "main"
       }
-    },
-    "required": [
-      "owner",
-      "repo"
-    ],
-    "type": "object"
+    }
   }
 },
 {
   "name": "compression_stats",
   "description": "Returns the latest compression job stats for a repo/branch: ratio, byte counts, file counts, status.",
   "inputSchema": {
+    "type": "object",
+    "required": [
+      "owner",
+      "repo"
+    ],
     "properties": {
-      "branch": {
-        "default": "main",
-        "type": "string"
-      },
       "owner": {
         "type": "string"
       },
       "repo": {
         "type": "string"
+      },
+      "branch": {
+        "type": "string",
+        "default": "main"
       }
-    },
-    "required": [
-      "owner",
-      "repo"
-    ],
-    "type": "object"
+    }
   }
 }];
 function rpc(id,r){return Response.json({jsonrpc:"2.0",id,result:r},{headers:CORS});}
@@ -163,9 +163,9 @@ const PAYLOAD_THRESHOLD_BYTES=2048;
 async function r2Put(r2,k,p){const b=typeof p==="string"?p:JSON.stringify(p,null,2);await r2.put(k,b,{httpMetadata:{contentType:"application/json"}});return "r2://"+k;}
 async function r2Get(r2,k){const o=await r2.get(k);if(!o)return null;const t=await o.text();try{return JSON.parse(t);}catch{return t;}}
 async function handle(name,args,env,ctx){
-  if(name==="afo_fsl_compress_status"){const res={status:"ok",worker:WORKER_NAME,version:VERSION,generated_at:"2026-06-21T21:47:21.027Z",bindings:{},tools:TOOLS.map(t=>t.name)};
+  if(name==="afo-fsl-compress_status"){const res={status:"ok",worker:WORKER_NAME,version:VERSION,generated_at:new Date().toISOString(),bindings:{},tools:TOOLS.map(t=>t.name)};
   try{await ensureSchema(env.DB);res.bindings.DB=true;}catch{res.bindings.DB=false;}
-  res.bindings.R2=!!env.R2;
+  res.bindings.R2=!!env.FSL_STORE;
   return res;}
   await ensureSchema(env.DB);
   if (name === "compress_repo") {
