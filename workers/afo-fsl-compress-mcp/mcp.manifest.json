@@ -1,0 +1,18 @@
+{
+  "name": "afo-fsl-compress-mcp",
+  "version": "0.1.0",
+  "description": "FSL V4 semantic compression engine. Compresses GitHub repos into dash-codex indexed chunks stored in R2, queryable via D1, with selective decompression (not embedding/RAG-based).",
+  "main": "worker.js",
+  "wrangler": "wrangler.jsonc",
+  "secrets": [
+    "GITHUB_TOKEN"
+  ],
+  "tools": [
+    "afo_fsl_compress_status",
+    "compress_repo",
+    "query_compressed",
+    "decompress_chunk",
+    "get_codex",
+    "compression_stats"
+  ]
+}
