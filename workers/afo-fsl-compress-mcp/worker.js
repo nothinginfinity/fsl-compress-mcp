@@ -1,4 +1,4 @@
-const VERSION="0.4.0";
+const VERSION="0.4.1";
 const V4README_FORMAT_VERSION="0.3.0";
 const WORKER_NAME="afo-fsl-compress-mcp";
 const CORS={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,Mcp-Session-Id'};
@@ -142,7 +142,7 @@ function utf8ToBase64(str){ return btoa(unescape(encodeURIComponent(str))); }
 
 const TOOLS=[
 { "name":"afo-fsl-compress_status", "description":"Health check. Returns version, all binding statuses, and tool list.", "inputSchema":{"type":"object","properties":{},"required":[]} },
-{ "name":"compress_repo", "description":"Cursor-aware: fetches GitHub repo tree, classifies each file (P/C/L/G/D), extracts keyword frequency+first-line per file, runs language-aware file-level signal detection (Python/JS Runtime, Cloudflare Worker Env), stores raw content in R2 keyed deterministically by repo+branch+path (idempotent re-runs), rebuilds the full dash-codex after every batch, and indexes everything in D1.",
+{ "name":"compress_repo", "description":"Cursor-aware: fetches GitHub repo tree, classifies each file (P/C/L/G/D), extracts keyword frequency+first-line per file, runs language-aware file-level signal detection (Python/JS Runtime, Cloudflare Worker Env), stores raw content in R2 keyed deterministically by repo+branch+path (idempotent re-runs), rebuilds the full dash-codex after every batch, and indexes everything in D1. Excludes its own .v4readme output from the scan.",
   "inputSchema":{"type":"object","required":["owner","repo"],"properties":{
     "owner":{"type":"string"},"repo":{"type":"string"},"branch":{"type":"string","default":"main"},
     "path":{"type":"string"},"max_files":{"type":"number","default":20},"offset":{"type":"number","default":0}
@@ -271,7 +271,7 @@ async function handle(name,args,env,ctx){
 
     const badExt=new Set(['png','jpg','jpeg','gif','ico','woff','woff2','ttf','pdf','zip','wasm','bin','mp4','mov','lock']);
     const badDir=['node_modules/','.git/','.wrangler/','dist/','build/','.next/','venv/','__pycache__/'];
-    let files=(tj.tree||[]).filter(f=>f.type==='blob' && (!root || f.path.startsWith(root)) && f.size<150000 && !badDir.some(d=>f.path.includes(d)) && !badExt.has((f.path.split('.').pop()||'').toLowerCase()))
+    let files=(tj.tree||[]).filter(f=>f.type==='blob' && (!root || f.path.startsWith(root)) && f.size<150000 && !badDir.some(d=>f.path.includes(d)) && !badExt.has((f.path.split('.').pop()||'').toLowerCase()) && f.path.split('/').pop()!=='.v4readme')
       .map(f=>({path:f.path,size:f.size,sha:f.sha})).sort((a,b)=>a.path.localeCompare(b.path));
 
     const batch=files.slice(offset,offset+max);
