@@ -1,4 +1,4 @@
-const VERSION="0.2.0";
+const VERSION="0.3.0";
 const WORKER_NAME="afo-fsl-compress-mcp";
 const CORS={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,Mcp-Session-Id'};
 
@@ -87,6 +87,10 @@ function codexCompact(path, codexRows){
   return p;
 }
 
+function utf8ToBase64(str){
+  return btoa(unescape(encodeURIComponent(str)));
+}
+
 const TOOLS=[
 {
   "name":"afo-fsl-compress_status",
@@ -147,7 +151,7 @@ const TOOLS=[
 },
 {
   "name":"generate_v4readme",
-  "description":"Builds and stores the .v4readme: a <2000-byte LLM-native spatial index containing a header+feature-vector, the global dash-codex mapping, a hyperlinked repo tree with [cN:bBYTES] chunk coordinates, and a domain-grouped (UI/Database/Routing/Auth) semantic lookup matrix with [cN:oOFFSET] pointers. Stored in R2 at fsl/{owner}/{repo}/{branch}/.v4readme. Greedily trims matrix then tree entries to stay under budget.",
+  "description":"Builds and stores the .v4readme: a <2000-byte LLM-native spatial index containing a header+feature-vector, the global dash-codex mapping, a hyperlinked repo tree with [cN:bBYTES] chunk coordinates, and a domain-grouped (UI/Database/Routing/Auth) semantic lookup matrix with [cN:oOFFSET] pointers. Stored in R2 at fsl/{owner}/{repo}/{branch}/.v4readme. Greedily trims matrix then tree entries to stay under budget. Run commit_v4readme_to_repo afterward to write it into the source repo itself.",
   "inputSchema":{"type":"object","required":["owner","repo"],"properties":{
     "owner":{"type":"string"},"repo":{"type":"string"},"branch":{"type":"string","default":"main"}
   }}
@@ -157,6 +161,14 @@ const TOOLS=[
   "description":"Retrieves the previously generated .v4readme for a repo/branch from R2 (run generate_v4readme first).",
   "inputSchema":{"type":"object","required":["owner","repo"],"properties":{
     "owner":{"type":"string"},"repo":{"type":"string"},"branch":{"type":"string","default":"main"}
+  }}
+},
+{
+  "name":"commit_v4readme_to_repo",
+  "description":"Writes the most recently generated .v4readme (from R2) directly into the source repo via the GitHub contents API - so the topological map lives version-controlled, next to the code it describes, visible to anyone browsing the repo. Creates the file if absent, updates it (using its current sha) if present. Requires the worker's GITHUB_TOKEN to have write access to the target repo, not just read.",
+  "inputSchema":{"type":"object","required":["owner","repo"],"properties":{
+    "owner":{"type":"string"},"repo":{"type":"string"},"branch":{"type":"string","default":"main"},
+    "target_path":{"type":"string","default":".v4readme"},"message":{"type":"string"}
   }}
 }
 ];
@@ -411,7 +423,7 @@ async function handle(name,args,env,ctx){
     }
 
     const r2Key='fsl/'+repoKey+'/'+branch+'/.v4readme';
-    await env.FSL_STORE.put(r2Key,doc);
+    await env.FSL_STORE.put(r2Key,doc,{httpMetadata:{contentType:'text/plain; charset=utf-8'}});
 
     return {ok:true,repo:repoKey,branch,r2_key:r2Key,byte_size:byteLen(doc),truncated,content:doc};
   }
@@ -426,6 +438,36 @@ async function handle(name,args,env,ctx){
     if(!obj) return {ok:false,error:'.v4readme not found; run generate_v4readme first'};
     const text=await obj.text();
     return {ok:true,repo:repoKey,branch,r2_key:r2Key,byte_size:byteLen(text),content:text};
+  }
+
+  if(name==="commit_v4readme_to_repo"){
+    const {owner,repo}=args;
+    if(!owner) throw new Error("commit_v4readme_to_repo: owner required");
+    if(!repo) throw new Error("commit_v4readme_to_repo: repo required");
+    const branch=args.branch||'main', repoKey=owner+'/'+repo;
+    const targetPath=args.target_path||'.v4readme';
+    const r2Key='fsl/'+repoKey+'/'+branch+'/.v4readme';
+    const obj=await env.FSL_STORE.get(r2Key);
+    if(!obj) return {ok:false,error:'.v4readme not found in R2; run generate_v4readme first'};
+    const content=await obj.text();
+
+    const getRes=await ghFetch(env,'https://api.github.com/repos/'+owner+'/'+repo+'/contents/'+encodeURIComponent(targetPath)+'?ref='+encodeURIComponent(branch));
+    let sha;
+    if(getRes.ok){ const gj=await getRes.json(); sha=gj.sha; }
+    else if(getRes.status!==404){ return {ok:false,error:'GitHub lookup failed: '+getRes.status}; }
+
+    const putBody={ message: args.message||'chore: update .v4readme (FSL V4 topological index, auto-generated)', content: utf8ToBase64(content), branch };
+    if(sha) putBody.sha=sha;
+
+    const putRes=await fetch('https://api.github.com/repos/'+owner+'/'+repo+'/contents/'+encodeURIComponent(targetPath),{
+      method:'PUT',
+      headers:{Authorization:'Bearer '+env.GITHUB_TOKEN,'User-Agent':'fsl-compress-mcp','Content-Type':'application/json',Accept:'application/vnd.github+json'},
+      body:JSON.stringify(putBody)
+    });
+    const putJson=await putRes.json();
+    if(!putRes.ok) return {ok:false,error:'GitHub commit failed: '+putRes.status+' '+(putJson.message||JSON.stringify(putJson))};
+
+    return {ok:true,repo:repoKey,branch,path:targetPath,was_update:!!sha,commit_sha:putJson.commit&&putJson.commit.sha,html_url:putJson.content&&putJson.content.html_url,byte_size:byteLen(content)};
   }
 
   throw new Error("Unknown tool: "+name);
