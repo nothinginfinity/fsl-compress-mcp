@@ -1,0 +1,14 @@
+{
+  "name": "afo-fsl-compress-mcp",
+  "main": "worker.js",
+  "compatibility_date": "2024-11-01"
+  ,"d1_databases": [
+    {"binding":"DB","database_name":"afo-fsl-compress-db","database_id":"a9b0b1d3-5655-458c-bd0f-d5e139e0f33e"}
+  ]
+  ,"r2_buckets": [
+    {"binding":"FSL_STORE","bucket_name":"fsl-compressed-blobs"}
+  ]
+  ,"vars":{"WORKER_VERSION":"0.1.0","WORKER_NAME":"afo-fsl-compress-mcp"}
+  ,"observability":{"enabled":true,"head_sampling_rate":1}
+  ,"placement":{"mode":"smart"}
+}
