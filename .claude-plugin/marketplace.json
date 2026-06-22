@@ -1,0 +1,20 @@
+{
+  "name": "AFO FSL Compress Skill Pack",
+  "slug": "afo-fsl-compress-skills",
+  "version": "0.1.0",
+  "description": "Skills for using AFO FSL Compress MCP as a repo intelligence operating system: compress, recover, query, generate v4readme artifacts, and approve repo mutations.",
+  "author": {
+    "name": "AFO",
+    "support": "jaredtechfit@gmail.com"
+  },
+  "plugins": [
+    "plugins/afo-fsl-compress"
+  ],
+  "skills": [
+    "compress-large-repo",
+    "recover-failed-offset",
+    "query-compressed-repo",
+    "generate-v4readme",
+    "approve-and-commit-v4readme"
+  ]
+}

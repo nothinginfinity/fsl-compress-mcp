@@ -1,0 +1,37 @@
+{
+  "name": "AFO FSL Compress",
+  "slug": "afo-fsl-compress",
+  "version": "0.1.0",
+  "description": "Agent skills for safely compressing GitHub repositories into FSL chunks, inspecting compressed indexes, recovering blocked offsets, and publishing approved v4readme artifacts.",
+  "skills": [
+    {
+      "name": "compress-large-repo",
+      "path": "skills/compress-large-repo/SKILL.md"
+    },
+    {
+      "name": "recover-failed-offset",
+      "path": "skills/recover-failed-offset/SKILL.md"
+    },
+    {
+      "name": "query-compressed-repo",
+      "path": "skills/query-compressed-repo/SKILL.md"
+    },
+    {
+      "name": "generate-v4readme",
+      "path": "skills/generate-v4readme/SKILL.md"
+    },
+    {
+      "name": "approve-and-commit-v4readme",
+      "path": "skills/approve-and-commit-v4readme/SKILL.md"
+    }
+  ],
+  "references": [
+    "references/tool-map.yml",
+    "skills/compress-large-repo/references/retry-policy.yml",
+    "skills/compress-large-repo/references/verification-checklist.md",
+    "skills/recover-failed-offset/references/offset-recovery.yml",
+    "skills/query-compressed-repo/references/query-patterns.md",
+    "skills/generate-v4readme/references/v4readme-template.md",
+    "skills/approve-and-commit-v4readme/references/approval-flow.yml"
+  ]
+}
