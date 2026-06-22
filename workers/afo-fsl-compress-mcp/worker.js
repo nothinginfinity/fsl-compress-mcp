@@ -1,4 +1,4 @@
-const VERSION="0.4.2";
+const VERSION="0.5.0";
 const V4README_FORMAT_VERSION="0.3.0";
 const WORKER_NAME="afo-fsl-compress-mcp";
 const CORS={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,Mcp-Session-Id'};
@@ -142,7 +142,7 @@ function utf8ToBase64(str){ return btoa(unescape(encodeURIComponent(str))); }
 
 const TOOLS=[
 { "name":"afo-fsl-compress_status", "description":"Health check. Returns version, all binding statuses, and tool list.", "inputSchema":{"type":"object","properties":{},"required":[]} },
-{ "name":"compress_repo", "description":"Cursor-aware: fetches GitHub repo tree, classifies each file (P/C/L/G/D), extracts keyword frequency+first-line per file, runs language-aware file-level signal detection (Python/JS Runtime, Cloudflare Worker Env), stores raw content in R2 keyed deterministically by repo+branch+path (idempotent re-runs), rebuilds the full dash-codex after every batch, prunes stale chunks for files no longer present once the scan completes, and indexes everything in D1. Excludes its own .v4readme output from the scan.",
+{ "name":"compress_repo", "description":"Cursor-aware: fetches GitHub repo tree, classifies each file (P/C/L/G/D), extracts keyword frequency+first-line per file, runs language-aware file-level signal detection (Python/JS Runtime, Cloudflare Worker Env), stores raw content in R2 keyed deterministically by repo+branch+path (idempotent re-runs), rebuilds the full dash-codex after every batch, and indexes everything in D1.",
   "inputSchema":{"type":"object","required":["owner","repo"],"properties":{
     "owner":{"type":"string"},"repo":{"type":"string"},"branch":{"type":"string","default":"main"},
     "path":{"type":"string"},"max_files":{"type":"number","default":20},"offset":{"type":"number","default":0}
@@ -568,6 +568,44 @@ export default {
     if(request.method==="OPTIONS") return new Response(null,{status:204,headers:CORS});
     const url=new URL(request.url);
     if(url.pathname==="/health") return Response.json({status:"ok",worker:WORKER_NAME,version:VERSION},{headers:CORS});
+
+    if(url.pathname==="/api/compress_repo" && request.method==="POST"){
+      let b={}; try{ b=await request.json(); }catch{ return Response.json({ok:false,error:'Parse error'},{status:400,headers:CORS}); }
+      let owner=b.owner, repo=b.repo; const branch=b.branch||'main';
+      if(b.url && (!owner||!repo)){
+        const m=/github\.com\/([^\/\s]+)\/([^\/\s#?]+)/.exec(b.url);
+        if(m){ owner=owner||m[1]; repo=repo||m[2].replace(/\.git$/,''); }
+      }
+      if(!owner||!repo) return Response.json({ok:false,error:'owner/repo or a github.com url is required'},{status:400,headers:CORS});
+      try{
+        await ensureSchema(env.DB);
+        let offset=0, done=false, last=null, loops=0;
+        while(!done && loops<10){
+          last=await handle('compress_repo',{owner,repo,branch,max_files:30,offset},env,ctx);
+          if(!last.ok) return Response.json(last,{status:400,headers:CORS});
+          offset=last.next_offset; done=last.done; loops++;
+        }
+        const readme=await handle('generate_v4readme',{owner,repo,branch},env,ctx);
+        if(!readme.ok) return Response.json(readme,{status:400,headers:CORS});
+        return Response.json({ok:true,repo:owner+'/'+repo,branch,sha:last.sha,files_compressed:last.total_chunks_indexed,orig_bytes:last.orig_bytes,compressed_bytes:last.compressed_bytes,ratio:last.ratio,manifest:readme.content,manifest_bytes:readme.byte_size,truncated:readme.truncated},{status:200,headers:CORS});
+      }catch(e){ return Response.json({ok:false,error:e.message},{status:500,headers:CORS}); }
+    }
+
+    if(url.pathname==="/api/list_chunks" && request.method==="GET"){
+      const sp=url.searchParams;
+      try{
+        const r=await handle('list_chunks',{owner:sp.get('owner'),repo:sp.get('repo'),branch:sp.get('branch')||'main'},env,ctx);
+        return Response.json(r,{status:r.ok===false?404:200,headers:CORS});
+      }catch(e){ return Response.json({ok:false,error:e.message},{status:500,headers:CORS}); }
+    }
+
+    if(url.pathname==="/api/get_feature_vector" && request.method==="GET"){
+      const sp=url.searchParams;
+      try{
+        const r=await handle('get_feature_vector',{owner:sp.get('owner'),repo:sp.get('repo'),branch:sp.get('branch')||'main'},env,ctx);
+        return Response.json(r,{status:r.ok===false?404:200,headers:CORS});
+      }catch(e){ return Response.json({ok:false,error:e.message},{status:500,headers:CORS}); }
+    }
 
     if(url.pathname==="/api/decompress_chunk"){
       let p={};
