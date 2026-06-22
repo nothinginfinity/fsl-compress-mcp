@@ -1,0 +1,21 @@
+retry_policy:
+  default_start:
+    small_repo_max_files: 1000
+    large_repo_max_files: 100
+  blocked_batch_backoff:
+    - 100
+    - 50
+    - 30
+    - 20
+    - 10
+    - 5
+    - 1
+  rules:
+    - Always preserve owner, repo, branch, and offset when retrying.
+    - Retry from the failed offset, not from zero.
+    - If max_files 1 is blocked, isolate the specific file and report it.
+    - Treat a lower successful batch as progress, not as a degraded result.
+    - Continue from the returned next_offset after every successful batch.
+  final_verification:
+    - list_chunks
+    - get_feature_vector

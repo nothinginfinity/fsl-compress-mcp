@@ -1,0 +1,28 @@
+offset_recovery:
+  required_fields:
+    - owner
+    - repo
+    - branch
+    - failed_offset
+    - last_successful_next_offset
+  backoff_sequence:
+    - 100
+    - 50
+    - 30
+    - 20
+    - 10
+    - 5
+    - 1
+  status_values:
+    running: Continue from returned next_offset.
+    blocked: Lower max_files and retry the same offset.
+    isolated: max_files 1 failed; report the file/offset.
+    done: Verify with list_chunks and get_feature_vector.
+  receipt_fields:
+    - job_id
+    - sha
+    - failed_offset
+    - retry_max_files
+    - next_offset
+    - done
+    - total_chunks_indexed

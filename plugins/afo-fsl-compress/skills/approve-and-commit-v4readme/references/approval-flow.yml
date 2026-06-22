@@ -1,0 +1,31 @@
+approval_flow:
+  mutation: commit_v4readme_to_repo
+  approval_required: true
+  approval_prompt_fields:
+    - owner
+    - repo
+    - branch
+    - source_sha
+    - artifact_paths
+    - commit_message
+    - overwrite_risk
+  approved_status:
+    - approved
+    - explicitly_requested_by_user
+  denied_status:
+    - denied
+    - unclear
+    - wrong_repo
+    - wrong_branch
+  receipt:
+    fields:
+      - actor_id
+      - session_id
+      - tool_use_id
+      - owner
+      - repo
+      - branch
+      - source_sha
+      - commit_sha
+      - artifact_paths
+      - timestamp

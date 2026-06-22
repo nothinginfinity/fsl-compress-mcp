@@ -1,0 +1,42 @@
+tool_family: AFO_FSL_Compress
+version: 0.1.0
+tools:
+  compress_repo:
+    purpose: Compress and index a GitHub repo batch.
+    required_inputs: [owner, repo]
+    important_inputs: [branch, max_files, offset]
+    success_signals: [ok, job_id, sha, files_found, files_compressed_this_batch, total_chunks_indexed, next_offset, done, ratio]
+  list_chunks:
+    purpose: Verify indexed chunks and inspect the compressed tree.
+    required_inputs: [owner, repo]
+    important_inputs: [branch, limit, offset]
+  query_compressed:
+    purpose: Search compressed metadata by term.
+    required_inputs: [owner, repo, term]
+    important_inputs: [branch, limit]
+  get_feature_vector:
+    purpose: Summarize repo-level compressed signals, detected domains, keywords, and ratio.
+    required_inputs: [owner, repo]
+    important_inputs: [branch]
+  decompress_chunk:
+    purpose: Selectively recover one file or chunk when metadata is insufficient.
+    required_inputs: [owner, repo]
+    important_inputs: [branch, chunk_id, file_path]
+  decompress_chunk_range:
+    purpose: Recover multiple indexed chunks for focused inspection.
+    required_inputs: [owner, repo]
+    important_inputs: [branch, start, end]
+  generate_v4readme:
+    purpose: Generate a v4 compressed operating manual from the index.
+    required_inputs: [owner, repo]
+    important_inputs: [branch]
+  get_v4readme:
+    purpose: Read an already-generated v4readme artifact.
+    required_inputs: [owner, repo]
+    important_inputs: [branch]
+  commit_v4readme_to_repo:
+    purpose: Commit generated v4readme artifacts back to GitHub.
+    required_inputs: [owner, repo]
+    important_inputs: [branch]
+    mutation: true
+    approval_required: true
